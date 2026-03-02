@@ -1,0 +1,837 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Cycle of Madness</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        :root {
+            --bg-color: #000;
+            --accent: #b71c1c;
+            --accent-glow: #ff5252;
+            --text-main: #e0e0e0;
+            --slot-bg: #151515;
+            --slot-border: #333;
+        }
+
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+        body {
+            background-color: #000;
+            margin: 0; padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            overflow: hidden;
+            color: var(--text-main);
+        }
+
+        #app-frame {
+            width: 100%;
+            max-width: 440px;
+            height: 100%;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            background: var(--bg-color);
+        }
+
+        /* --- ВЕРХНИЙ ИНТЕРФЕЙС --- */
+        #ui-layer {
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            padding: 15px 20px;
+            z-index: 100;
+            background: linear-gradient(180deg, rgba(0,0,0,1) 0%, rgba(0,0,0,0.9) 80%, transparent 100%);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            pointer-events: none;
+        }
+
+        /* Шкала Рассудка */
+        .sanity-wrapper {
+            width: 100%;
+            margin-bottom: 15px;
+            pointer-events: auto;
+        }
+        .sanity-header {
+            display: flex;
+            justify-content: space-between;
+            font-size: 11px;
+            font-weight: 800;
+            letter-spacing: 1px;
+            color: #888;
+            margin-bottom: 5px;
+            text-transform: uppercase;
+        }
+        .sanity-track {
+            height: 8px;
+            background: #222;
+            border-radius: 4px;
+            border: 1px solid #444;
+            overflow: hidden;
+        }
+        .sanity-fill {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(90deg, #555, var(--accent));
+            transition: width 0.5s ease;
+        }
+
+        /* Кнопка Радио */
+        .radio-wrapper {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            pointer-events: auto;
+            cursor: pointer;
+        }
+        .radio-btn {
+            width: 60px; height: 60px;
+            border-radius: 50%;
+            background: rgba(30,30,30,0.8);
+            border: 2px solid #555;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 26px;
+            margin-bottom: 5px;
+            transition: all 0.3s;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+        }
+        .radio-label {
+            font-size: 10px; color: #666; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px;
+        }
+
+        /* Активное состояние радио */
+        .radio-wrapper.active .radio-btn {
+            border-color: var(--accent-glow);
+            background: rgba(120, 0, 0, 0.4);
+            box-shadow: 0 0 20px rgba(255, 0, 0, 0.5);
+            animation: pulse 1.5s infinite;
+            color: #fff;
+        }
+        .radio-wrapper.active .radio-label { color: var(--accent-glow); text-shadow: 0 0 5px rgba(255,0,0,0.5); }
+        @keyframes pulse { 0% {transform: scale(1);} 50% {transform: scale(1.05);} 100% {transform: scale(1);} }
+
+
+        /* --- ИГРОВАЯ ОБЛАСТЬ --- */
+        #game-view {
+            flex: 1;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            padding-top: 140px;
+        }
+
+        /* Fullscreen Scene */
+        .scene-full {
+            position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+            background-size: cover; background-position: center;
+            display: flex; flex-direction: column; justify-content: flex-end;
+            z-index: 1;
+        }
+        .scene-full::after {
+            content: ''; position: absolute; inset: 0;
+            background: linear-gradient(to top, #000 10%, rgba(0,0,0,0.7) 50%, rgba(0,0,0,0.4) 100%);
+            pointer-events: none;
+        }
+        .full-content {
+            position: relative; z-index: 2; padding: 20px; padding-bottom: 90px;
+        }
+
+        /* Normal Scene */
+        .scene-normal {
+            position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+            display: flex; flex-direction: column;
+        }
+        .normal-img-wrap {
+            position: absolute; top: 0; left: 0; right: 0; height: 50%; z-index: 1;
+        }
+        .normal-img-wrap img {
+            width: 100%; height: 100%; object-fit: cover;
+            mask-image: linear-gradient(to bottom, black 70%, transparent 100%);
+            -webkit-mask-image: linear-gradient(to bottom, black 70%, transparent 100%);
+        }
+        .normal-content {
+            position: relative; margin-top: auto; z-index: 2;
+            padding: 20px; padding-bottom: 90px;
+            background: linear-gradient(to bottom, transparent 0%, #000 15%);
+            max-height: 60%; overflow-y: auto;
+        }
+
+        /* Текст и Кнопки */
+        .story-text {
+            font-size: 16px; line-height: 1.5; margin-bottom: 20px; color: #ddd;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.9);
+        }
+        .text-insane { color: #ff8a80; font-family: monospace; letter-spacing: -0.5px; }
+
+        .btn {
+            width: 100%; padding: 15px; margin-bottom: 10px;
+            background: rgba(30, 30, 30, 0.7); border: 1px solid rgba(255,255,255,0.1);
+            backdrop-filter: blur(4px); border-radius: 10px; color: #fff;
+            text-align: left; font-size: 15px; cursor: pointer; transition: 0.2s;
+        }
+        .btn:active { background: rgba(183, 28, 28, 0.5); border-color: var(--accent); }
+        .btn.locked { opacity: 0.5; background: rgba(0,0,0,0.6); pointer-events: none; color: #777; }
+
+
+        /* --- ИНВЕНТАРЬ --- */
+        #inventory {
+            height: 80px; position: absolute; bottom: 0; left: 0; right: 0;
+            background: #080808; border-top: 1px solid #222;
+            display: flex; justify-content: center; align-items: center; gap: 15px;
+            z-index: 200; padding-bottom: env(safe-area-inset-bottom, 10px);
+        }
+        .inv-slot {
+            width: 50px; height: 50px; background: var(--slot-bg);
+            border: 1px solid var(--slot-border); border-radius: 8px;
+            display: flex; justify-content: center; align-items: center;
+            font-size: 26px; box-shadow: inset 0 0 10px rgba(0,0,0,0.5);
+        }
+        .inv-slot span { animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+        @keyframes popIn { from {transform: scale(0);} to {transform: scale(1);} }
+
+    </style>
+</head>
+<body>
+
+    <!-- === АУДИО СЛОИ === -->
+    <audio id="bg-music" loop></audio> <!-- Фон (петля) -->
+    <audio id="scene-sfx"></audio>     <!-- Звук сцены (один раз) -->
+    <audio id="radio-player" loop></audio> <!-- Радио -->
+    <audio id="click-sfx" src="click.mp3"></audio> <!-- Клик -->
+
+    <div id="app-frame">
+        
+        <!-- ВЕРХНИЙ ИНТЕРФЕЙС -->
+        <div id="ui-layer">
+            <div class="sanity-wrapper">
+                <div class="sanity-header">
+                    <span>Рассудок</span>
+                    <span id="sanity-val">0%</span>
+                </div>
+                <div class="sanity-track">
+                    <div id="sanity-bar" class="sanity-fill"></div>
+                </div>
+            </div>
+
+            <div class="radio-wrapper" id="radio-wrapper" onclick="toggleRadio()">
+                <div class="radio-btn">📻</div>
+                <div class="radio-label">Включить радио</div>
+            </div>
+        </div>
+
+        <!-- ИГРА -->
+        <div id="game-view"></div>
+
+        <!-- ИНВЕНТАРЬ -->
+        <div id="inventory">
+            <div class="inv-slot" id="slot-notebook"></div>
+            <div class="inv-slot" id="slot-knife"></div>
+            <div class="inv-slot" id="slot-camera"></div>
+            <div class="inv-slot" id="slot-cross"></div>
+        </div>
+
+    </div>
+
+    <script>
+        const tg = window.Telegram.WebApp;
+        tg.expand(); 
+
+        // --- НАСТРОЙКИ АУДИО ---
+        const AMBIENT_TRACKS = {
+            calm: "bg_calm.mp3",   
+            tense: "bg_tense.mp3", 
+            insane: "bg_insane.mp3" 
+        };
+        const DEFAULT_RADIO = "static.mp3"; 
+
+        const ITEM_ICONS = {
+            "notebook": "📓", "knife": "🔪", "camera": "📷", "cross": "✝️"
+        };
+
+        let state = {
+            scene: 'start',
+            madness: 0,
+            inventory: [],
+            radioOn: false,
+            audioStarted: false
+        };
+
+        // --- СЦЕНАРИЙ ---
+        const story = {
+            "start": {
+                type: "normal",
+                img: "start.jpg",
+                choices: [
+                    { text: "Начать игру за Алекс", next: "prolog" },
+                    { text: "Начать игру за Ника", next: "prolog_nica" },
+                    { text: "💰 Поблагодарить автора", next: "donate" } ]
+            },
+            "donate": {
+                type: "normal",
+                img: "donate.jpg", 
+                text: "Разработка игры требует времени и сил. Буду благодарен за любую поддержку!\n\n💳 Альфа:\n9112 3810 0133 5546\ \n\nСпасибо, что играете!",
+                choices: [
+                    { text: "Вернуться в меню", next: "start" } ]
+            },
+            "prolog_nica": {
+                type: "full",
+                img: "prolog_nica.jpg",
+                text: "История пока недоступна. Вы можете ускорить ее выход, поддержав автора.",
+                choices: [ { text: "Вернуться", next: "start" } ]
+            },
+            "prolog": {
+                type: "normal",
+                img: "prolog.gif",
+                sound: "door_open.mp3",  
+                radio: "news.mp3", 
+                text: "Ты ничего не помнишь. Ты застрял в глуши. В кармане старый радиоприемник и фотография незнакомой женщины.",
+                choices: [
+                    { text: "Ждать помощи (безумие +10)", next: "car", madness: 10 },
+                    { text: "Пойти в деревню", next: "village" },
+                    { text: "Попытаться позвонить (+5)", next: "mobile", madness: 5 }
+                ]
+            },
+            "car": {
+                type: "normal",
+                img: "car.gif",
+                img_40: "car_insane.jpg",
+                sound: "insane.mp3",  
+                radio: "car.mp3",       
+                text: "Прошло так много времени. Почему еще ночь? Кажется, что из тумана кто-то наблюдает.",
+                text_40: "Это все сводит меня с ума. Это просто галлюцинации.",
+                choices: [
+                    { text: "Ждать помощи", next: "car_dead" },
+                    { text: "Пойти в деревню", next: "village" }
+                ]
+            },
+            "car_dead": {
+                type: "normal",
+                img: "car_dead.gif",
+                sound: "dead.mp3",  
+                radio: "car_dead.mp3",    
+                text: "Они приходят, когда долго стоишь на месте. От них не спастись.",
+                choices: [ { text: "Начать сначала", next: "start", reset: true } ]
+            },
+            "mobile": {
+                type: "normal",
+                img: "mobile.jpg",
+                sound: "mobile_up.mp3",  
+                radio: "mobile_three.mp3", 
+                text: "Надо забраться повыше, чтобы словить сеть.",
+                choices: [
+                    { text: "Забраться на дерево", next: "mobile_trees" },
+                    { text: "Не рисковать (+10)", next: "mobile_risk", madness: 10 }
+                ]
+            },
+            "mobile_trees": {
+                type: "normal",
+                img: "mobile_trees.gif",
+                sound: "mobile_trees.mp3",  
+                radio: "mobile_three.mp3", 
+                text: "Сети все равно нет... Но в дупле дерева есть записная книжка. Прочитать?",
+                getItem: "notebook",
+                choices: [
+                    { text: "Да (+20)", next: "mobile_yes", madness: 20 },
+                    { text: "Нет (+10)", next: "mobile_no", madness: 10 }
+                ]
+            },
+            "mobile_yes": {
+                type: "normal",
+                img: "mobile_yes.jpg",
+                sound: "mobile_ues.mp3",  
+                radio: "mobile_yes.mp3", 
+                text: "Это записная книжка человека под псевдонимом Климпер. В деревне неподалеку проводятся жуткие ритуалы.",
+                choices: [
+                    { text: "Ждать помощи", next: "car" },
+                    { text: "Пойти в деревню", next: "village" }
+                ]
+            },
+            "mobile_no": {
+                type: "normal",
+                img: "mobile_no.jpg",
+                sound: "mobile_slime.mp3",  
+                radio: "mobile_no.mp3", 
+                text: "Что за дрянь? Кажется, что я схожу с ума.",
+                removeItem: "notebook",
+                choices: [
+                    { text: "Ждать помощи", next: "car" },
+                    { text: "Пойти в деревню", next: "village" }
+                ]
+            },
+            "mobile_risk": {
+                type: "normal",
+                img: "mobile_risk.jpg",
+                sound: "risk.mp3",  
+                radio: "mobile_risk.mp3", 
+                text: "В кустах что-то шумит. Это дикие зверь? Лучше уйти.",
+                choices: [
+                    { text: "Ждать помощи", next: "car" },
+                    { text: "Пойти в деревню", next: "village" }
+                ]
+            },
+            "village": {
+                type: "normal",
+                img: "village_road.gif",
+                img_40: "village_rinsane.jpg",
+                sound: "forest_hight.mp3",  
+                radio: "mobile_war.mp3", 
+                text: "Черт, мобильник разрядился. Туман такой густой.",
+                choices: [
+                    { text: "Вернуться к машине", next: "village_back" },
+                    { text: "Идти дальше", next: "village_enter" }
+                ]
+            },
+            "village_back": {
+                type: "normal",
+                img: "village_back.png",
+                img_40: "village_binsane.jpg",
+                img_60: "village_binsane2.png",
+                sound: "forest_back.mp3",  
+                radio: "angry.mp3", 
+                text: "Я точно шел по этой дороге? Этот лес меня пугает.",
+                choices: [
+                    { text: "Пойти вперед (+10)", next: "village_back", madness: 10 },
+                    { text: "Свернуть (+10)", next: "village_forest", madness: 10 },
+                    { text: "Идти назад (+15)", next: "village_enter", madness: 15 },
+                    { text: "Выполнить ритуал (+10) (Нужна книга)", next: "village_enter", madness: 10, reqItem: "notebook" }
+                ]
+            },
+            "village_forest": {
+                type: "normal",
+                img: "village_forest.jpg",
+                img_40: "village_finsane.jpg",
+                img_60: "village_finsane2.jpg",               
+                text: "Кажется, я заблудился...",
+                sound: "forest_back.mp3",  
+                radio: "bilog.mp3", 
+                text_60: "Деревья будто следят за мной.",
+                choices: [
+                    { text: "Вернуться назад", next: "village_back" },
+                    { text: "Углубиться в чащу (+5)", next: "forest_thorn", madness: 5 },
+                    { text: "Совершить обряд (Нужна книга)", next: "forest_house", reqItem: "notebook", showIfMadnessMin: 40 }
+                ]
+            },
+            "forest_thorn": {
+                type: "normal", 
+                img: "forest_thorn.jpg", 
+                img_40: "forest_thorn1.jpg",
+                img_60: "forest_thorn2.jpg",
+                getItem: "knife",
+                sound: "forest_back.mp3",  
+                radio: "nina.mp3", 
+                text: "Терновник слишком густой. Здесь не пройти. Нож? Кто-то вырезал вырезал имя на дереве, но не разобрать... Тина? Нина? ",
+                choices: [{text: "Назад", next: "village_forest"}]
+            },
+            "forest_house": {
+                type: "normal",
+                img: "forest_house.gif",
+                sound: "forest_back.mp3",  
+                radio: "nina2.mp3", 
+                text: "Эта записная книжка сводит меня с ума. Но она работает.",
+                choices: [
+                    { text: "Зайти внутрь (+10)", next: "forest_inside", madness: 10 },
+                    { text: "Уйти (+100)", next: "forest_end", madness: 100 }
+                ]
+            },
+            "forest_end": {
+                type: "normal",
+                img: "forest_end.gif",
+                sound: "forest_house.mp3",  
+                radio: "nina2.mp3", 
+                text: "Бесцельное блуждание сломило твою волю. Лесные духи сделали из твоего тела инкубатор.",
+                choices: [{text: "Начать заново", next: "start", reset: true}]
+            },
+            "forest_inside": {
+                type: "normal",
+                img: "forest_inside.jpg",
+                sound: "forest_dom.mp3",  
+                radio: "dom.mp3", 
+                text: "Что это такое? Оно живое? Черт, почему я не могу пошевелиться?",
+                choices: [
+                    { text: "Сопротивляться (+20)", next: "forest_monster1", madness: 20 },
+                    { text: "Сдаться (+10)", next: "forest_monster2", madness: 10 }
+                ]
+            },
+            "forest_monster1": {
+                type: "normal",
+                img: "forest_monster1.jpg",
+                getItem: "camera",
+                sound: "forest_dom1.mp3",  
+                radio: "dom1.mp3", 
+                text: "Куда пропала тварь? Голова раскалывается. Фотоаппарат?",
+                choices: [
+                    { text: "Смотреть фото", next: "photo_one" },
+                    { text: "Не трогать (-10) (Оставить камеру)", next: "village_enter", madness: -10, removeItem: "camera" }
+                ]
+            },
+            "forest_monster2": {
+                type: "normal",
+                img: "forest_monster2.jpg",
+                sound: "forest_dom2.mp3",  
+                radio: "dom2.mp3", 
+                text: "Куда пропала тварь? Надо выбраться из этого проклятого места.",
+                choices: [
+                    { text: "Отдохнуть (-30)", next: "village_enter", madness: -30 },
+                    { text: "Уйти", next: "village_enter" }
+                ]
+            },
+            // ФОТОГАЛЕРЕЯ
+            "photo_one": { type: "normal", img: "photo_one.jpg", choices: [{text: "Смотреть дальше", next: "photo_two"}] },
+            "photo_two": { type: "normal", img: "photo_two.jpg", choices: [{text: "Смотреть дальше", next: "photo_three"}] },
+            "photo_three": { type: "normal", img: "photo_three.jpg", choices: [{text: "Смотреть дальше", next: "photo_four"}] },
+            "photo_four": { type: "normal", img: "photo_four.jpg", choices: [{text: "Смотреть дальше", next: "photo_five"}] },
+            "photo_five": { type: "normal", img: "photo_five.jpg", choices: [{text: "Смотреть дальше", next: "photo_six"}] },
+            "photo_six": { type: "normal", img: "photo_six.jpg", choices: [{text: "Смотреть дальше (-10)", next: "house_photo", madness: -10}] },
+            "house_photo": {
+                type: "normal",
+                img: "house_photo.jpg",
+                text: "Ох, на последнем фото хозяйка фотоаппарата? Она милая.",
+                choices: [{ text: "Уйти", next: "village_enter" }]
+            },
+            "village_enter": {
+                type: "normal",
+                img: "village_enter.jpg",
+                img_40: "village_enter2.jpg",
+                sound: "house.mp3",  
+                radio: "house23.mp3", 
+                text: "Какое жуткое местечко. Мурашки по коже.",
+                choices: [
+                    { text: "Уйти", next: "forest_end" },
+                    { text: "Исследовать", next: "village_center" },
+                    { text: "Вырезать печати (Нужны Книга+Камера)", next: "village_center", showIfAllItems: ["notebook", "camera"], madness: -30 }
+                ]
+            },
+            "village_center": {
+                type: "normal",
+                img: "village_center.jpg",
+                img_40: "village_center2.jpg",
+                sound: "center.mp3",  
+                radio: "center2.mp3", 
+                text: "Кладбище посреди деревни? Это просто ужасно.",
+                choices: [
+                    { text: "Уйти", next: "village_end" },
+                    { text: "К церкви", next: "church_center" }
+                ]
+            },
+            "village_end": {
+                type: "normal",
+                img: "village_end.jpg",
+                img_40: "village_end2.jpg",
+                sound: "vrag.mp3",  
+                radio: "vrag1.mp3", 
+                text: "Нет! Нет! Не подходи ко мне!",
+                choices: [
+                    { text: "Драться (Нужен Нож)", next: "village_fight", reqItem: "knife" },
+                    { text: "Убежать", next: "game_over" }
+                ]
+            },
+            "village_fight": {
+                type: "normal",
+                img: "village_fight.jpg",
+                img_40: "village_fight2.jpg",
+                sound: "draka.mp3",  
+                radio: "draka1.mp3", 
+                text: "Увидев в руках нож, существо ушло. Что это было?",
+                choices: [
+                    { text: "Уйти в туман", next: "village_fog" },
+                    { text: "Исследовать", next: "church_center" }
+                ]
+            },
+            "village_fog": {
+                type: "normal",
+                img: "village_fog.jpg",
+                img_40: "village_fog2.jpg",
+                radio: "fog.mp3", 
+                text: "Я не вижу куда идти. Что за проклятое место.",
+                choices: [{text: "Исследовать", next: "church_center"}]
+            },
+            "church_center": {
+                type: "normal",
+                img: "church_center.jpg",
+                img_40: "church_center2.jpg",
+                sound: "church.mp3",  
+                radio: "church1.mp3", 
+                text: "Церковь? Ноги сами привели меня сюда.",
+                choices: [
+                    { text: "Идти к алтарю", next: "church_altar" },
+                    { text: "Спуститься в подвал", next: "church_base" }
+                ]
+            },
+            "church_altar": {
+                type: "normal",
+                img: "church_altar.jpg",
+                img_40: "church_altar2.jpg",  
+                radio: "demon.mp3", 
+                text: "Чаша с водой. Господи, как же хочется пить.",
+                choices: [
+                    { text: "Выпить (+10)", next: "church_altar1", madness: 10 },
+                    { text: "Пройти мимо (-10)", next: "church_base", madness: -10 }
+                ]
+            },
+            "church_altar1": {
+                type: "normal",
+                img: "church_altar1.jpg",
+                img_40: "church_altar12.jpg",
+                getItem: "cross",
+                sound: "church.mp3",  
+                radio: "daer.mp3", 
+                text: "В чаше с водой обнаружился нательный серебряный крестик. (Получен Крестик)",
+                choices: [
+                    { text: "Пройти мимо", next: "church_base" }
+                ]
+            },
+            "church_base": {
+                type: "normal",
+                img: "church_base.jpg",
+                img_40: "church_base1.jpg",
+                sound: "base.mp3",  
+                text: "Оттуда тянет могильной сыростью. Вдруг там что-то важное?",
+                choices: [
+                    { text: "Спуститься", next: "church_sanct" },
+                    { text: "Уйти", next: "church_people" }
+                ]
+            },
+            "church_people": {
+                type: "normal",
+                img: "church_people.jpg",
+                img_40: "church_people1.jpg",
+                sound: "monah.mp3",  
+                text: "Что это за существа? От запаха крови хочется блевать.",
+                choices: [
+                    { text: "Бежать", next: "game_over1" },
+                    { text: "Молиться (Нужна книга)", next: "church_end", reqItem: "notebook" }
+                ]
+            },
+            "church_sanct": {
+                type: "normal",
+                img: "church_sanct.jpg",
+                img_40: "church_sanct1.jpg",
+                sound: "cry.mp3",  
+                radio: "monah1.mp3", 
+                text: "Теперь вы точно уверены, что были здесь. Девушка спрашивает, зачем вы снова приехали.",
+                text_0: "Девушка начинает плакать, увидев вас. Она говорит, что теперь может спокойно уйти.",
+                choices: [
+                    { text: "Я здесь впервые!", next: "end_story1", showIfMadnessMax: 39 },
+                    { text: "Так было надо", next: "end_story2", showIfMadnessMin: 40 },
+                    { text: "Провести ритуал (Нужна Книга+Камера)", next: "end_story3", showIfAllItems: ["notebook", "camera"] },
+                    { text: "Закончить все (Все 4 предмета)", next: "true_story", showIfAllItems: ["notebook", "camera", "knife", "cross"] },
+                    { text: "...", next: "real_story", showIfMadnessMax: 0 }
+                ]
+            },
+            // КОНЦОВКИ
+            "game_over": { type: "normal", img: "game_over.jpg", radio: "end.mp3", text: "Перед смертью вы услышали, как существо назвало вас по имени.", choices: [{text: "Заново", next: "start", reset: true}] },
+            "game_over1": { type: "normal", img: "game_over1.jpg", radio: "end2.mp3",  text: "Ваши глаза вытекли, а мозг сварился в закипевшей крови.", choices: [{text: "Заново", next: "start", reset: true}] },
+            "church_end": { type: "normal", img: "church_end.jpg", radio: "end1",  text: "Восславив лесных духов, вы утратили человеческий облик.", choices: [{text: "Заново", next: "start", reset: true}] },
+            "end_story1": { type: "normal", img: "end_story1.jpg", radio: "end3.mp3",  text: "Существо грустно усмехается, и говорит, что вы снова все забыли.", choices: [{text: "Заново", next: "start", reset: true}] },
+            "end_story2": { type: "normal", img: "end_story2.jpg", radio: "end4.mp3",  text:  "Пора вернуть плоть, что вы взяли. Тело не слушается. Пора вернуться в цикл.", choices: [{text: "Заново", next: "start", reset: true}] },
+            "end_story3": { type: "normal", img: "end_story3.jpg", radio: "end5.mp3",  text: "Ритуал Уробороса. Она снова и снова рожает вас. Вы вспомнили, как обрели тайные знания. Чтобы выбраться из проклятого места, вы провели чудовищной ритуал над своей подругой. Лесные духи пели вам.", choices: [{text: "Я здесь впервые", next: "start", reset: true}] },
+            "true_story": { type: "normal", img: "true_story.jpg", radio: "end6.mp3",  text: "Вы вспомнили, что застряли в бесконечном цикле. Бесконечный комшмар. Вы просто хотели выбраться вдвоем.", choices: [{text: "Начать сначала", next: "start", reset: true}] },
+            "real_story": { type: "normal", img: "real_story.jpg", radio: "end7.mp3",  text: "Давящее напряжение исчезло. Вы просыпаетесь в машине.", choices: [{text: "Начать сначала", next: "start", reset: true}] }
+        };
+
+        // --- ГЛАВНАЯ ФУНКЦИЯ УПРАВЛЕНИЯ ЗВУКОМ ---
+        function manageAudio(sceneId) {
+            // 1. Запуск музыки после первого клика (браузеры блокируют автоплей)
+            if (!state.audioStarted) return;
+
+            const scene = story[sceneId];
+
+            // === СЛОЙ 1: ФОНОВАЯ МУЗЫКА (ЗАВИСИТ ОТ БЕЗУМИЯ) ===
+            const bgPlayer = document.getElementById('bg-music');
+            let targetBg = AMBIENT_TRACKS.calm;
+            
+            if (state.madness >= 80) targetBg = AMBIENT_TRACKS.insane;
+            else if (state.madness >= 40) targetBg = AMBIENT_TRACKS.tense;
+
+            // Если трек сменился - меняем
+            if (!bgPlayer.src.includes(encodeURI(targetBg))) {
+                bgPlayer.src = targetBg;
+                bgPlayer.volume = 0.4; // Фоновая музыка чуть тише
+                bgPlayer.play().catch(e => console.log('BG play block'));
+            } else if (bgPlayer.paused) {
+                bgPlayer.play().catch(e => {});
+            }
+
+            // === СЛОЙ 2: ЗВУК СЦЕНЫ (ОДИН РАЗ) ===
+            // Сначала ВСЕГДА выключаем старый звук
+            const sfxPlayer = document.getElementById('scene-sfx');
+            sfxPlayer.pause();
+            sfxPlayer.currentTime = 0; // Перемотка в начало
+
+            // Если есть новый звук — включаем
+            if (scene.sound) {
+                sfxPlayer.src = scene.sound;
+                sfxPlayer.volume = 1.0;
+                sfxPlayer.play().catch(e => {});
+            }
+
+            // === СЛОЙ 3: РАДИО (ЕСЛИ ВКЛЮЧЕНО) ===
+            manageRadio(scene);
+        }
+
+        function manageRadio(scene) {
+            const player = document.getElementById('radio-player');
+            const targetSrc = (scene && scene.radio) ? scene.radio : DEFAULT_RADIO;
+            
+            // Если источник другой - меняем
+            if (!player.src.includes(encodeURI(targetSrc))) {
+                player.src = targetSrc;
+            }
+
+            // Играем или нет
+            if (state.radioOn && state.audioStarted) {
+                player.volume = 0.8;
+                player.play().catch(e => {});
+            } else {
+                player.pause();
+            }
+        }
+
+        function toggleRadio() {
+            state.radioOn = !state.radioOn;
+            const wrapper = document.getElementById('radio-wrapper');
+            const player = document.getElementById('radio-player');
+
+            if (state.radioOn) {
+                wrapper.classList.add('active');
+                if (state.audioStarted) player.play().catch(e=>{});
+            } else {
+                wrapper.classList.remove('active');
+                player.pause();
+            }
+        }
+
+        // --- ДВИЖОК ИНТЕРФЕЙСА ---
+
+        function updateUI() {
+            document.getElementById('sanity-bar').style.width = state.madness + '%';
+            document.getElementById('sanity-val').innerText = state.madness + '%';
+            
+            ['notebook', 'knife', 'camera', 'cross'].forEach(item => {
+                const el = document.getElementById('slot-' + item);
+                if (state.inventory.includes(item)) {
+                    if (el.innerHTML === "") el.innerHTML = `<span>${ITEM_ICONS[item]}</span>`;
+                } else {
+                    el.innerHTML = "";
+                }
+            });
+        }
+
+        function renderScene(sceneId) {
+            if (state.madness >= 100 && !sceneId.includes("game_over") && !sceneId.includes("end") && !sceneId.includes("forest_end")) {
+                sceneId = "game_over"; 
+            }
+
+            const scene = story[sceneId];
+            if (!scene) return;
+            state.scene = sceneId;
+            
+            // Звук клика (кроме самого старта)
+            if (state.audioStarted) document.getElementById('click-sfx').play().catch(()=>{});
+
+            // Рендер картинки/текста (как раньше)
+            let img = scene.img;
+            let text = scene.text;
+            if (state.madness >= 60 && scene.img_60) img = scene.img_60;
+            else if (state.madness >= 40 && scene.img_40) img = scene.img_40;
+            if (state.madness >= 60 && scene.text_60) text = scene.text_60;
+            else if (state.madness >= 40 && scene.text_40) text = scene.text_40;
+            else if (state.madness === 0 && scene.text_0) text = scene.text_0;
+
+            const view = document.getElementById('game-view');
+            view.innerHTML = '';
+
+            // Функция отрисовки кнопок (вынес отдельно)
+            const createContent = (isFull) => {
+                const content = document.createElement('div');
+                content.className = isFull ? 'full-content' : 'normal-content';
+                if (text) {
+                    const txtDiv = document.createElement('div');
+                    txtDiv.className = 'story-text';
+                    if (state.madness > 80) txtDiv.classList.add('text-insane');
+                    txtDiv.innerText = text;
+                    content.appendChild(txtDiv);
+                }
+                appendButtons(content, scene);
+                return content;
+            };
+
+            if (scene.type === 'full') {
+                const wrap = document.createElement('div');
+                wrap.className = 'scene-full';
+                wrap.style.backgroundImage = `url('${img}')`;
+                wrap.appendChild(createContent(true));
+                view.appendChild(wrap);
+            } else {
+                const wrap = document.createElement('div');
+                wrap.className = 'scene-normal';
+                const imgWrap = document.createElement('div');
+                imgWrap.className = 'normal-img-wrap';
+                const image = document.createElement('img');
+                image.src = img;
+                imgWrap.appendChild(image);
+                wrap.appendChild(imgWrap);
+                wrap.appendChild(createContent(false));
+                view.appendChild(wrap);
+            }
+            
+            // Обновляем аудио
+            manageAudio(sceneId);
+        }
+
+        function appendButtons(container, scene) {
+            scene.choices.forEach(choice => {
+                if (choice.showIfMadnessMin && state.madness < choice.showIfMadnessMin) return;
+                if (choice.showIfMadnessMax && state.madness > choice.showIfMadnessMax) return;
+                if (choice.showIfAllItems && !choice.showIfAllItems.every(i => state.inventory.includes(i))) return;
+
+                const btn = document.createElement('div');
+                btn.className = 'btn';
+                let isLocked = false;
+                let btnText = choice.text;
+
+                if (choice.reqItem && !state.inventory.includes(choice.reqItem)) {
+                    isLocked = true;
+                    btn.classList.add('locked');
+                    btnText = `🔒 ${btnText}`;
+                }
+                btn.innerHTML = `<span>${btnText}</span>`;
+
+                if (!isLocked) {
+                    btn.onclick = () => {
+                        // Просто снимаем блокировку автоплея, ничего не запуская напрямую
+                        if (!state.audioStarted) {
+                            state.audioStarted = true;
+                        }
+
+                        if (choice.madness) state.madness += choice.madness;
+                        state.madness = Math.max(0, Math.min(100, state.madness));
+
+                        if (scene.getItem && !state.inventory.includes(scene.getItem)) state.inventory.push(scene.getItem);
+                        if (scene.removeItem) state.inventory = state.inventory.filter(i => i !== scene.removeItem);
+                        if (choice.removeItem) state.inventory = state.inventory.filter(i => i !== choice.removeItem);
+
+                        if (choice.reset) { state.madness = 0; state.inventory = []; }
+
+                        updateUI(); 
+                        renderScene(choice.next); 
+                    };
+                }
+                container.appendChild(btn);
+            });
+        }
+
+        // Запуск
+        updateUI();
+        renderScene('start');
+    </script>
+</body>
+</html>
