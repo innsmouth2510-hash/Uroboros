@@ -89,7 +89,7 @@
         .normal-img-wrap img { width: 100%; height: 100%; object-fit: cover; mask-image: linear-gradient(to bottom, black 70%, transparent 100%); -webkit-mask-image: linear-gradient(to bottom, black 70%, transparent 100%); }
         .normal-content { position: relative; margin-top: auto; z-index: 2; padding: 20px; padding-bottom: 90px; background: linear-gradient(to bottom, transparent 0%, #000 15%); max-height: 60%; overflow-y: auto; }
 
-        .story-text { font-size: 16px; line-height: 1.5; margin-bottom: 20px; color: #ddd; text-shadow: 0 2px 4px rgba(0,0,0,0.9); }
+        .story-text { font-size: 16px; line-height: 1.5; margin-bottom: 20px; color: #ddd; text-shadow: 0 2px 4px rgba(0,0,0,0.9); white-space: pre-wrap; }
         .text-insane { color: #ff8a80; font-family: monospace; letter-spacing: -0.5px; }
 
         .btn { width: 100%; padding: 15px; margin-bottom: 10px; background: rgba(30, 30, 30, 0.7); border: 1px solid rgba(255,255,255,0.1); backdrop-filter: blur(4px); border-radius: 10px; color: #fff; text-align: left; font-size: 15px; cursor: pointer; transition: 0.2s; }
@@ -154,7 +154,9 @@
 
         let state = { scene: 'start', madness: 0, inventory: [], radioOn: false, audioStarted: false };
 
-        // --- СЦЕНАРИЙ ---
+        // --- СЦЕНЫ, КОТОРЫЕ ГРУЗИМ СРАЗУ ---
+        const PRIORITY_SCENES = ["start", "donate", "prolog", "prolog_nica", "car"];
+
         const story = {
             "start": {
                 type: "normal", img: "start.jpg",
@@ -418,7 +420,6 @@
             "real_story": { type: "normal", img: "real_story.jpg", radio: "end7.mp3",  text: "Давящее напряжение исчезло. Вы просыпаетесь в машине.", choices: [{text: "Начать сначала", next: "start", reset: true}] }
         };
 
-        // --- ГЛАВНАЯ ФУНКЦИЯ УПРАВЛЕНИЯ ЗВУКОМ ---
         function manageAudio(sceneId) {
             if (!state.audioStarted) return;
             const scene = story[sceneId];
@@ -589,49 +590,77 @@
             });
         }
 
-        // --- ПРЕДЗАГРУЗКА РЕСУРСОВ ---
+        // --- ЛЕНИВАЯ ЗАГРУЗКА ---
         function startPreload() {
-            const assets = new Set(); 
-            for (let key in story) {
+            // 1. Приоритетные файлы (чтобы игра запустилась быстро)
+            const priorityAssets = new Set();
+            // Системные
+            priorityAssets.add({type: 'audio', src: 'click.mp3'});
+            priorityAssets.add({type: 'audio', src: AMBIENT_TRACKS.calm});
+            
+            // Сюжетные (начало)
+            PRIORITY_SCENES.forEach(key => {
                 const s = story[key];
-                if (s.img) assets.add({type: 'img', src: s.img});
-                if (s.img_40) assets.add({type: 'img', src: s.img_40});
-                if (s.img_60) assets.add({type: 'img', src: s.img_60});
-                if (s.sound) assets.add({type: 'audio', src: s.sound});
-                if (s.radio) assets.add({type: 'audio', src: s.radio});
+                if (s) {
+                    if (s.img) priorityAssets.add({type: 'img', src: s.img});
+                    if (s.sound) priorityAssets.add({type: 'audio', src: s.sound});
+                }
+            });
+
+            // 2. Все остальные файлы (фоновая загрузка)
+            const backgroundAssets = new Set();
+            for (let key in story) {
+                if (PRIORITY_SCENES.includes(key)) continue; // Уже в приоритете
+                const s = story[key];
+                if (s.img) backgroundAssets.add({type: 'img', src: s.img});
+                if (s.img_40) backgroundAssets.add({type: 'img', src: s.img_40});
+                if (s.img_60) backgroundAssets.add({type: 'img', src: s.img_60});
+                if (s.sound) backgroundAssets.add({type: 'audio', src: s.sound});
+                if (s.radio) backgroundAssets.add({type: 'audio', src: s.radio});
             }
-            assets.add({type: 'audio', src: 'click.mp3'});
-            assets.add({type: 'audio', src: 'static.mp3'});
-            Object.values(AMBIENT_TRACKS).forEach(track => assets.add({type: 'audio', src: track}));
+            backgroundAssets.add({type: 'audio', src: AMBIENT_TRACKS.tense});
+            backgroundAssets.add({type: 'audio', src: AMBIENT_TRACKS.insane});
+            backgroundAssets.add({type: 'audio', src: 'static.mp3'});
 
-            const total = assets.size;
-            let loaded = 0;
-            const bar = document.getElementById('loader-bar');
-            const txt = document.getElementById('loader-text');
-
-            if (total === 0) {
-                finishLoad();
-                return;
-            }
-
-            const updateProgress = () => {
-                loaded++;
-                const percent = Math.floor((loaded / total) * 100);
+            // ЗАПУСК ПРИОРИТЕТНОЙ ЗАГРУЗКИ
+            loadBatch(priorityAssets, (percent) => {
+                const bar = document.getElementById('loader-bar');
+                const txt = document.getElementById('loader-text');
                 bar.style.width = percent + '%';
                 txt.innerText = `ЗАГРУЗКА... ${percent}%`;
-                if (loaded >= total) setTimeout(finishLoad, 500);
+            }, () => {
+                // Когда приоритет загружен - пускаем в игру
+                finishLoad();
+                // И сразу тихо начинаем грузить остальное
+                setTimeout(() => {
+                    loadBatch(backgroundAssets, ()=>{}, ()=>{}); 
+                }, 1000);
+            });
+        }
+
+        function loadBatch(assetsSet, onProgress, onComplete) {
+            const assets = Array.from(assetsSet);
+            let loaded = 0;
+            const total = assets.length;
+
+            if (total === 0) { onComplete(); return; }
+
+            const check = () => {
+                loaded++;
+                onProgress(Math.floor((loaded / total) * 100));
+                if (loaded >= total) onComplete();
             };
 
             assets.forEach(asset => {
                 if (asset.type === 'img') {
                     const img = new Image();
                     img.src = asset.src;
-                    img.onload = updateProgress;
-                    img.onerror = updateProgress;
+                    img.onload = check;
+                    img.onerror = check;
                 } else {
                     const audio = new Audio();
                     audio.src = asset.src;
-                    updateProgress(); 
+                    check(); // Для аудио не ждем полной загрузки
                 }
             });
         }
@@ -646,6 +675,7 @@
             }, 500);
         }
 
+        // Старт скрипта
         startPreload();
     </script>
 </body>
